@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#111827">
+<title>Chord Coach</title>
+<style>
+:root{
+  --bg:#0f172a; --panel:#111827; --panel2:#1f2937; --line:#334155;
+  --text:#f8fafc; --muted:#94a3b8; --blue:#60a5fa; --green:#4ade80;
+  --yellow:#facc15; --red:#fb7185;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; min-height:100vh;
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+  background:radial-gradient(circle at top,#172554 0,var(--bg) 35%,#020617 100%);
+  color:var(--text);
+}
+.app{width:min(100%,680px);margin:auto;padding:18px 14px 32px}
+.header{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.title{font-size:1.4rem;font-weight:800}
+.subtitle{color:var(--muted);font-size:.84rem;margin-top:2px}
+.live{display:flex;align-items:center;gap:7px;color:var(--muted);font-size:.78rem;font-weight:700}
+.dot{width:10px;height:10px;border-radius:50%;background:#64748b}
+.dot.on{background:var(--green);box-shadow:0 0 0 4px rgba(74,222,128,.15)}
+.card{
+  background:rgba(17,24,39,.92); border:1px solid rgba(148,163,184,.14);
+  border-radius:18px; box-shadow:0 14px 36px rgba(0,0,0,.22);
+  padding:16px; margin-bottom:12px;
+}
+.section-title{color:var(--muted);font-size:.75rem;font-weight:800;letter-spacing:.09em;text-transform:uppercase;margin-bottom:10px}
+.detected{text-align:center;padding:8px 0 2px}
+.chord{font-size:4.7rem;font-weight:900;line-height:1;letter-spacing:-.06em;margin:8px 0 7px}
+.state{color:var(--muted);font-size:.92rem;min-height:22px}
+.confidence-row{display:flex;justify-content:space-between;font-size:.82rem;margin-top:16px;margin-bottom:7px}
+.bar{height:9px;background:#0b1220;border-radius:999px;overflow:hidden}
+.bar>div{height:100%;width:0;background:linear-gradient(90deg,#3b82f6,#60a5fa);transition:width .18s ease}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:520px){.grid{grid-template-columns:1fr}}
+button,select,input[type=range]{width:100%}
+button,select{min-height:44px;border-radius:12px;border:1px solid var(--line);background:#0b1220;color:var(--text);padding:0 12px;font:inherit}
+button{cursor:pointer;font-weight:800}
+button.primary{background:linear-gradient(135deg,#2563eb,#3b82f6);border:none}
+button.secondary{background:#172033}
+button:disabled{opacity:.5;cursor:not-allowed}
+.practice-top{display:grid;grid-template-columns:1fr auto;align-items:center;gap:10px}
+.switch{position:relative;width:50px;height:28px;display:inline-block}
+.switch input{display:none}
+.switch span{position:absolute;inset:0;background:#475569;border-radius:999px;transition:.2s}
+.switch span::after{content:"";position:absolute;width:22px;height:22px;top:3px;left:3px;border-radius:50%;background:white;transition:.2s}
+.switch input:checked+span{background:#2563eb}
+.switch input:checked+span::after{transform:translateX(22px)}
+.practice-result{margin-top:12px;min-height:46px;border-radius:12px;background:#0b1220;display:flex;align-items:center;justify-content:center;font-size:1.2rem;font-weight:900}
+.target-row{margin-top:12px;display:grid;grid-template-columns:110px 1fr;align-items:center;gap:10px}
+.label{color:var(--muted);font-size:.86rem}
+.history{text-align:center;font-size:1.05rem;font-weight:800;word-break:break-word;line-height:1.8}
+.settings-row{margin:12px 0}
+.settings-label{display:flex;justify-content:space-between;gap:10px;font-size:.85rem;margin-bottom:5px}
+input[type=range]{accent-color:#3b82f6}
+.small{color:var(--muted);font-size:.75rem;line-height:1.5}
+.guide img{display:block;width:100%;border-radius:12px;background:white}
+.guide-note{color:var(--muted);text-align:center;font-size:.78rem;margin-top:8px}
+.statusline{margin-top:10px;text-align:center;color:var(--muted);font-size:.78rem}
+.error{color:var(--red)!important}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="header">
+    <div>
+      <div class="title">🎸 Chord Coach</div>
+      <div class="subtitle">Listen • Learn • Practice</div>
+    </div>
+    <div class="live">
+      <span id="liveDot" class="dot"></span>
+      <span id="liveText">MIC OFF</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="section-title">Detected chord</div>
+    <div class="detected">
+      <div id="chordDisplay" class="chord">—</div>
+      <div id="stateDisplay" class="state">Tap Start Listening</div>
+    </div>
+    <div class="confidence-row">
+      <span>Match confidence</span>
+      <strong id="confidenceText">0%</strong>
+    </div>
+    <div class="bar"><div id="confidenceBar"></div></div>
+    <div id="statusLine" class="statusline">Volume: 0.0000 | Gap: 0.0%</div>
+  </div>
+
+  <div class="card">
+    <div class="grid">
+      <button id="startBtn" class="primary">🎙 Start Listening</button>
+      <select id="micSelect">
+        <option value="">Default microphone</option>
+      </select>
+    </div>
+    <div class="small" style="margin-top:9px;">
+      Your browser will ask for microphone permission the first time.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="practice-top">
+      <div class="section-title" style="margin:0">Practice mode</div>
+      <label class="switch">
+        <input id="practiceToggle" type="checkbox">
+        <span></span>
+      </label>
+    </div>
+    <div class="target-row">
+      <div class="label">Target chord</div>
+      <select id="targetChord" disabled></select>
+    </div>
+    <div id="practiceResult" class="practice-result">Practice Mode Off</div>
+  </div>
+
+  <div class="card">
+    <div class="section-title">Recent chords</div>
+    <div id="historyDisplay" class="history">No chords detected yet</div>
+  </div>
+
+  <div class="card">
+    <div class="section-title">Detection settings</div>
+    <div class="settings-row">
+      <div class="settings-label">
+        <span>Precision threshold</span>
+        <strong id="precisionValue">80%</strong>
+      </div>
+      <input id="precisionSlider" type="range" min="0" max="100" value="80">
+    </div>
+    <div class="settings-row">
+      <div class="settings-label">
+        <span>Mic sensitivity</span>
+        <strong id="sensitivityValue">70%</strong>
+      </div>
+      <input id="sensitivitySlider" type="range" min="0" max="100" value="70">
+    </div>
+  </div>
+
+  <div class="card">
+    <button id="guideToggle" class="secondary">Hide Chord Guide</button>
+    <div id="guideSection" class="guide" style="margin-top:12px">
+      <div class="section-title">Chord reference guide</div>
+      <img id="guideImage" src="chords_guide.png" alt="Guitar chord reference guide">
+      <div id="guideNote" class="guide-note">
+        Keep <b>chords_guide.png</b> in the same folder as this HTML file.
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const BUFFER_SECONDS = 0.75;
+const ANALYSIS_INTERVAL_MS = 150;
+const SMOOTHING_FRAMES = 5;
+const MIN_STABLE_DETECTIONS = 3;
+const CONFIDENCE_GAP = 0.05;
+const HISTORY_SIZE = 8;
+const MIN_FREQ = 70;
+const MAX_FREQ = 1500;
+
+const NOTE_INDEX = {
+  "C":0,"C#":1,"Db":1,"D":2,"D#":3,"Eb":3,"E":4,"F":5,"F#":6,"Gb":6,
+  "G":7,"G#":8,"Ab":8,"A":9,"A#":10,"Bb":10,"B":11
+};
+
+const CHORD_NOTES = {
+  "A Major":["A","C#","E"], "A Minor":["A","C","E"], "A7":["A","C#","E","G"],
+  "B Major":["B","D#","F#"], "B Minor":["B","D","F#"], "B7":["B","D#","F#","A"],
+  "C Major":["C","E","G"], "C Minor":["C","Eb","G"], "C7":["C","E","G","Bb"],
+  "D Major":["D","F#","A"], "D Minor":["D","F","A"], "D7":["D","F#","A","C"],
+  "E Major":["E","G#","B"], "E Minor":["E","G","B"], "E7":["E","G#","B","D"],
+  "F Major":["F","A","C"], "F Minor":["F","Ab","C"], "F7":["F","A","C","Eb"],
+  "G Major":["G","B","D"], "G Minor":["G","Bb","D"], "G7":["G","B","D","F"]
+};
+
+const CHORD_SHORT_NAMES = {
+  "A Major":"A","A Minor":"Am","A7":"A7",
+  "B Major":"B","B Minor":"Bm","B7":"B7",
+  "C Major":"C","C Minor":"Cm","C7":"C7",
+  "D Major":"D","D Minor":"Dm","D7":"D7",
+  "E Major":"E","E Minor":"Em","E7":"E7",
+  "F Major":"F","F Minor":"Fm","F7":"F7",
+  "G Major":"G","G Minor":"Gm","G7":"G7"
+};
+
+function normalizeVector(v){
+  const norm=Math.sqrt(v.reduce((s,x)=>s+x*x,0));
+  return norm>0?v.map(x=>x/norm):v;
+}
+
+const TEMPLATES={};
+for(const [name,notes] of Object.entries(CHORD_NOTES)){
+  const v=new Array(12).fill(0);
+  notes.forEach(note=>v[NOTE_INDEX[note]]=1);
+  TEMPLATES[name]=normalizeVector(v);
+}
+
+const chordDisplay=document.getElementById("chordDisplay");
+const stateDisplay=document.getElementById("stateDisplay");
+const confidenceText=document.getElementById("confidenceText");
+const confidenceBar=document.getElementById("confidenceBar");
+const statusLine=document.getElementById("statusLine");
+const liveDot=document.getElementById("liveDot");
+const liveText=document.getElementById("liveText");
+const startBtn=document.getElementById("startBtn");
+const micSelect=document.getElementById("micSelect");
+const practiceToggle=document.getElementById("practiceToggle");
+const targetChord=document.getElementById("targetChord");
+const practiceResult=document.getElementById("practiceResult");
+const historyDisplay=document.getElementById("historyDisplay");
+const precisionSlider=document.getElementById("precisionSlider");
+const precisionValue=document.getElementById("precisionValue");
+const sensitivitySlider=document.getElementById("sensitivitySlider");
+const sensitivityValue=document.getElementById("sensitivityValue");
+const guideToggle=document.getElementById("guideToggle");
+const guideSection=document.getElementById("guideSection");
+const guideImage=document.getElementById("guideImage");
+const guideNote=document.getElementById("guideNote");
+
+let threshold=0.80;
+let sensitivity=70;
+let audioContext=null;
+let analyser=null;
+let mediaStream=null;
+let sourceNode=null;
+let frequencyData=null;
+let timeData=null;
+let analysisTimer=null;
+let isListening=false;
+let chromaHistory=[];
+let chordDetectionHistory=[];
+let recentChords=[];
+let lastLoggedChord=null;
+
+Object.keys(CHORD_NOTES).forEach(name=>{
+  const option=document.createElement("option");
+  option.value=name;
+  option.textContent=`${CHORD_SHORT_NAMES[name]} — ${name}`;
+  targetChord.appendChild(option);
+});
+targetChord.value="C Major";
+
+precisionSlider.addEventListener("input",()=>{
+  threshold=Number(precisionSlider.value)/100;
+  precisionValue.textContent=`${precisionSlider.value}%`;
+});
+
+sensitivitySlider.addEventListener("input",()=>{
+  sensitivity=Number(sensitivitySlider.value);
+  sensitivityValue.textContent=`${sensitivity}%`;
+});
+
+guideToggle.addEventListener("click",()=>{
+  const hidden=guideSection.style.display==="none";
+  guideSection.style.display=hidden?"block":"none";
+  guideToggle.textContent=hidden?"Hide Chord Guide":"Show Chord Guide";
+});
+
+guideImage.addEventListener("error",()=>{
+  guideImage.style.display="none";
+  guideNote.innerHTML="⚠️ <b>chords_guide.png</b> was not found. Put it in the same folder as this HTML file.";
+});
+
+practiceToggle.addEventListener("change",()=>{
+  targetChord.disabled=!practiceToggle.checked;
+  chordDetectionHistory=[];
+  if(practiceToggle.checked){
+    practiceResult.textContent=`Play ${CHORD_SHORT_NAMES[targetChord.value]}`;
+    practiceResult.style.color="var(--blue)";
+  } else {
+    practiceResult.textContent="Practice Mode Off";
+    practiceResult.style.color="var(--text)";
+  }
+});
+
+targetChord.addEventListener("change",()=>{
+  chordDetectionHistory=[];
+  if(practiceToggle.checked){
+    practiceResult.textContent=`Play ${CHORD_SHORT_NAMES[targetChord.value]}`;
+    practiceResult.style.color="var(--blue)";
+  }
+});
+
+function evaluatePractice(stableChord,scores){
+  if(!practiceToggle.checked)return;
+  const target=targetChord.value;
+  const targetScore=scores[target]||0;
+  if(stableChord===target){
+    practiceResult.textContent="Correct ✓";
+    practiceResult.style.color="var(--green)";
+  } else if(targetScore>=Math.max(0.60,threshold-0.10)){
+    practiceResult.textContent="Almost";
+    practiceResult.style.color="var(--yellow)";
+  } else {
+    practiceResult.textContent="Try Again";
+    practiceResult.style.color="var(--red)";
+  }
+}
+
+async function refreshMicrophones(){
+  try{
+    const devices=await navigator.mediaDevices.enumerateDevices();
+    const microphones=devices.filter(d=>d.kind==="audioinput");
+    const current=micSelect.value;
+    micSelect.innerHTML="";
+    microphones.forEach((device,index)=>{
+      const option=document.createElement("option");
+      option.value=device.deviceId;
+      option.textContent=device.label||`Microphone ${index+1}`;
+      micSelect.appendChild(option);
+    });
+    if(current && microphones.some(d=>d.deviceId===current)) micSelect.value=current;
+  }catch(err){
+    console.warn("Could not enumerate microphones:",err);
+  }
+}
+
+micSelect.addEventListener("change",async()=>{
+  if(isListening){
+    await stopListening();
+    await startListening();
+  }
+});
+
+startBtn.addEventListener("click",async()=>{
+  if(isListening) await stopListening();
+  else await startListening();
+});
+
+async function startListening(){
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    showError("Microphone API unavailable. Open this page over HTTPS or localhost.");
+    return;
+  }
+  try{
+    const selectedDevice=micSelect.value;
+    const constraints={
+      audio:{
+        echoCancellation:false,
+        noiseSuppression:false,
+        autoGainControl:false
+      }
+    };
+    if(selectedDevice) constraints.audio.deviceId={exact:selectedDevice};
+
+    mediaStream=await navigator.mediaDevices.getUserMedia(constraints);
+    audioContext=new (window.AudioContext||window.webkitAudioContext)();
+    await audioContext.resume();
+
+    sourceNode=audioContext.createMediaStreamSource(mediaStream);
+    analyser=audioContext.createAnalyser();
+    analyser.fftSize=8192;
+    analyser.smoothingTimeConstant=0.35;
+    sourceNode.connect(analyser);
+
+    frequencyData=new Float32Array(analyser.frequencyBinCount);
+    timeData=new Float32Array(analyser.fftSize);
+    chromaHistory=[];
+    chordDetectionHistory=[];
+    isListening=true;
+
+    liveDot.classList.add("on");
+    liveText.textContent="MIC LIVE";
+    startBtn.textContent="■ Stop Listening";
+    startBtn.classList.remove("primary");
+    startBtn.classList.add("secondary");
+    stateDisplay.textContent="Listening...";
+
+    await refreshMicrophones();
+    analysisTimer=setInterval(analyseAudio,ANALYSIS_INTERVAL_MS);
+  }catch(err){
+    console.error(err);
+    showError(err.name==="NotAllowedError"?"Microphone permission was denied.":`Microphone error: ${err.message}`);
+  }
+}
+
+async function stopListening(){
+  if(analysisTimer){clearInterval(analysisTimer);analysisTimer=null;}
+  if(mediaStream){mediaStream.getTracks().forEach(track=>track.stop());mediaStream=null;}
+  if(sourceNode){try{sourceNode.disconnect();}catch(e){} sourceNode=null;}
+  if(audioContext){try{await audioContext.close();}catch(e){} audioContext=null;}
+  analyser=null;
+  isListening=false;
+
+  liveDot.classList.remove("on");
+  liveText.textContent="MIC OFF";
+  startBtn.textContent="🎙 Start Listening";
+  startBtn.classList.add("primary");
+  startBtn.classList.remove("secondary");
+  chordDisplay.textContent="—";
+  stateDisplay.textContent="Tap Start Listening";
+  updateConfidence(0);
+  statusLine.textContent="Volume: 0.0000 | Gap: 0.0%";
+}
+
+function getRMS(){
+  analyser.getFloatTimeDomainData(timeData);
+  let sum=0;
+  for(let i=0;i<timeData.length;i++) sum+=timeData[i]*timeData[i];
+  return Math.sqrt(sum/timeData.length);
+}
+
+function getRmsThreshold(){
+  const minRms=0.003,maxRms=0.030;
+  return maxRms-(sensitivity/100)*(maxRms-minRms);
+}
+
+function frequencyToPitchClass(freq){
+  if(freq<=0)return null;
+  const midi=Math.round(69+12*Math.log2(freq/440));
+  return ((midi%12)+12)%12;
+}
+
+function calculateChroma(){
+  analyser.getFloatFrequencyData(frequencyData);
+  const sampleRate=audioContext.sampleRate;
+  const fftSize=analyser.fftSize;
+  const chroma=new Array(12).fill(0);
+
+  for(let bin=1;bin<frequencyData.length;bin++){
+    const freq=bin*sampleRate/fftSize;
+    if(freq<MIN_FREQ)continue;
+    if(freq>MAX_FREQ)break;
+    const db=frequencyData[bin];
+    if(!Number.isFinite(db))continue;
+    const magnitude=Math.pow(10,db/20);
+    const pc=frequencyToPitchClass(freq);
+    if(pc!==null)chroma[pc]+=magnitude;
+  }
+  return normalizeVector(chroma);
+}
+
+function getSmoothedChroma(newChroma){
+  chromaHistory.push(newChroma);
+  const maxFrames=Math.max(1,Math.round(BUFFER_SECONDS*1000/ANALYSIS_INTERVAL_MS));
+  while(chromaHistory.length>maxFrames)chromaHistory.shift();
+
+  const avg=new Array(12).fill(0);
+  chromaHistory.forEach(frame=>{
+    for(let i=0;i<12;i++)avg[i]+=frame[i];
+  });
+  for(let i=0;i<12;i++)avg[i]/=chromaHistory.length;
+  return normalizeVector(avg);
+}
+
+function dot(a,b){
+  let sum=0;
+  for(let i=0;i<a.length;i++)sum+=a[i]*b[i];
+  return sum;
+}
+
+function getStableChord(){
+  if(chordDetectionHistory.length<MIN_STABLE_DETECTIONS)return null;
+  const counts={};
+  chordDetectionHistory.forEach(chord=>counts[chord]=(counts[chord]||0)+1);
+
+  let bestChord=null,bestCount=0;
+  for(const [chord,count] of Object.entries(counts)){
+    if(count>bestCount){bestCount=count;bestChord=chord;}
+  }
+  return bestCount>=MIN_STABLE_DETECTIONS?bestChord:null;
+}
+
+function addToRecentHistory(chord){
+  if(chord===lastLoggedChord)return;
+  recentChords.push(CHORD_SHORT_NAMES[chord]||chord);
+  while(recentChords.length>HISTORY_SIZE)recentChords.shift();
+  lastLoggedChord=chord;
+  historyDisplay.textContent=recentChords.join("  →  ");
+}
+
+function analyseAudio(){
+  if(!analyser||!audioContext)return;
+
+  const rms=getRMS();
+  const rmsThreshold=getRmsThreshold();
+
+  if(rms<rmsThreshold){
+    chordDetectionHistory=[];
+    lastLoggedChord=null;
+    chordDisplay.textContent="—";
+    stateDisplay.textContent="Listening...";
+    updateConfidence(0);
+    statusLine.textContent=`Volume: ${rms.toFixed(4)} | Gap: 0.0%`;
+
+    if(practiceToggle.checked){
+      practiceResult.textContent=`Play ${CHORD_SHORT_NAMES[targetChord.value]}`;
+      practiceResult.style.color="var(--blue)";
+    }
+    return;
+  }
+
+  const chroma=getSmoothedChroma(calculateChroma());
+  const scores={};
+
+  for(const [name,template] of Object.entries(TEMPLATES)){
+    scores[name]=dot(chroma,template);
+  }
+
+  const sorted=Object.entries(scores).sort((a,b)=>b[1]-a[1]);
+  const [bestChord,bestScore]=sorted[0];
+  const secondScore=sorted[1][1];
+  const gap=bestScore-secondScore;
+  let stableChord=null;
+
+  if(bestScore<threshold){
+    chordDetectionHistory=[];
+    chordDisplay.textContent="—";
+    stateDisplay.textContent="Listening...";
+  } else if(gap<CONFIDENCE_GAP){
+    chordDetectionHistory=[];
+    chordDisplay.textContent="?";
+    stateDisplay.textContent="Uncertain...";
+  } else {
+    chordDetectionHistory.push(bestChord);
+    while(chordDetectionHistory.length>SMOOTHING_FRAMES)chordDetectionHistory.shift();
+
+    stableChord=getStableChord();
+
+    if(stableChord){
+      chordDisplay.textContent=CHORD_SHORT_NAMES[stableChord]||stableChord;
+      stateDisplay.textContent="Chord detected";
+      addToRecentHistory(stableChord);
+      evaluatePractice(stableChord,scores);
+    } else {
+      chordDisplay.textContent="…";
+      stateDisplay.textContent="Analyzing...";
+    }
+  }
+
+  updateConfidence(bestScore);
+  statusLine.textContent=`Volume: ${rms.toFixed(4)} | Gap: ${(gap*100).toFixed(1)}%`;
+}
+
+function updateConfidence(value){
+  const percent=Math.max(0,Math.min(100,value*100));
+  confidenceText.textContent=`${percent.toFixed(1)}%`;
+  confidenceBar.style.width=`${percent}%`;
+}
+
+function showError(message){
+  chordDisplay.textContent="!";
+  stateDisplay.textContent=message;
+  stateDisplay.classList.add("error");
+  setTimeout(()=>stateDisplay.classList.remove("error"),4000);
+}
+
+if(navigator.mediaDevices && navigator.mediaDevices.enumerateDevices){
+  refreshMicrophones();
+}
+</script>
+</body>
+</html>
