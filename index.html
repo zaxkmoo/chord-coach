@@ -64,6 +64,170 @@ input[type=range]{accent-color:#3b82f6}
 .guide-note{color:var(--muted);text-align:center;font-size:.78rem;margin-top:8px}
 .statusline{margin-top:10px;text-align:center;color:var(--muted);font-size:.78rem}
 .error{color:var(--red)!important}
+
+.header-actions{
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.header-actions .live{
+  margin-right:2px;
+}
+.header-icon-btn{
+  width:38px;
+  height:38px;
+  min-height:38px;
+  border-radius:50%;
+  padding:0;
+  display:grid;
+  place-items:center;
+  background:#172033;
+  border:1px solid rgba(148,163,184,.16);
+  box-shadow:none;
+}
+.header-icon-btn svg{
+  width:19px;
+  height:19px;
+  fill:#cbd5e1;
+}
+.play-header-btn{
+  background:linear-gradient(135deg,#2563eb,#3b82f6);
+  border:none;
+}
+.play-header-btn svg{
+  fill:white;
+}
+.play-header-btn.active{
+  background:linear-gradient(135deg,#1d4ed8,#2563eb);
+  box-shadow:0 0 0 4px rgba(59,130,246,.13);
+}
+@media(max-width:520px){
+  .header{
+    gap:10px;
+  }
+  .title{
+    font-size:1.16rem;
+  }
+  .subtitle{
+    font-size:.74rem;
+  }
+  .header-actions{
+    gap:6px;
+  }
+  .header-actions .live{
+    font-size:.68rem;
+  }
+  .header-icon-btn{
+    width:36px;
+    height:36px;
+    min-height:36px;
+  }
+}
+
+.control-card{
+  position:relative;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  min-height:112px;
+}
+.play-pause-btn{
+  width:72px;
+  height:72px;
+  min-height:72px;
+  border-radius:50%;
+  border:none;
+  background:linear-gradient(135deg,#2563eb,#60a5fa);
+  box-shadow:0 10px 28px rgba(37,99,235,.34);
+  display:grid;
+  place-items:center;
+  padding:0;
+}
+.play-pause-btn svg{
+  width:30px;
+  height:30px;
+  fill:white;
+}
+.gear-btn{
+  position:absolute;
+  right:14px;
+  top:14px;
+  width:44px;
+  height:44px;
+  min-height:44px;
+  border-radius:50%;
+  padding:0;
+  display:grid;
+  place-items:center;
+  background:#172033;
+}
+.gear-btn svg{
+  width:22px;
+  height:22px;
+  fill:#cbd5e1;
+}
+.control-caption{
+  position:absolute;
+  bottom:12px;
+  font-size:.78rem;
+  color:var(--muted);
+}
+.inline-history{
+  margin-top:14px;
+  padding-top:12px;
+  border-top:1px solid rgba(148,163,184,.14);
+}
+.inline-history .history{
+  font-size:.95rem;
+}
+.settings-overlay{
+  position:fixed;
+  inset:0;
+  background:rgba(2,6,23,.72);
+  display:none;
+  align-items:flex-end;
+  justify-content:center;
+  z-index:1000;
+}
+.settings-overlay.open{
+  display:flex;
+}
+.settings-sheet{
+  width:min(100%,680px);
+  max-height:82vh;
+  overflow:auto;
+  background:#111827;
+  border:1px solid rgba(148,163,184,.18);
+  border-radius:22px 22px 0 0;
+  padding:18px 16px calc(22px + env(safe-area-inset-bottom));
+  box-shadow:0 -20px 60px rgba(0,0,0,.45);
+}
+.settings-sheet-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  margin-bottom:12px;
+}
+.settings-sheet-title{
+  font-size:1.05rem;
+  font-weight:800;
+}
+.close-settings{
+  width:40px;
+  height:40px;
+  min-height:40px;
+  border-radius:50%;
+  padding:0;
+  font-size:1.2rem;
+  background:#172033;
+}
+.settings-block{
+  padding:12px 0;
+  border-top:1px solid rgba(148,163,184,.12);
+}
+.settings-block:first-of-type{
+  border-top:0;
+}
 </style>
 </head>
 <body>
@@ -74,9 +238,24 @@ input[type=range]{accent-color:#3b82f6}
       <div class="title">🎸 Chord Coach</div>
       <div class="subtitle">Listen • Learn • Practice</div>
     </div>
-    <div class="live">
-      <span id="liveDot" class="dot"></span>
-      <span id="liveText">MIC OFF</span>
+
+    <div class="header-actions">
+      <div class="live">
+        <span id="liveDot" class="dot"></span>
+        <span id="liveText">MIC OFF</span>
+      </div>
+
+      <button id="startBtn" class="header-icon-btn play-header-btn" aria-label="Play">
+        <svg id="playPauseIcon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M8 5v14l11-7z"></path>
+        </svg>
+      </button>
+
+      <button id="gearBtn" class="header-icon-btn" aria-label="Detection settings">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.07-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.61-.22l-2.39.96a7.2 7.2 0 0 0-1.63-.94L14.37 2.8a.5.5 0 0 0-.49-.4h-3.84a.5.5 0 0 0-.49.4L9.18 5.32c-.58.24-1.12.55-1.62.93l-2.4-.95a.5.5 0 0 0-.61.22L2.63 8.84a.5.5 0 0 0 .12.64l2.03 1.58c-.05.31-.08.65-.08.96 0 .3.03.61.07.92l-2.02 1.58a.5.5 0 0 0-.12.64l1.92 3.32a.5.5 0 0 0 .61.22l2.39-.96c.5.39 1.05.7 1.63.95l.37 2.51a.5.5 0 0 0 .49.4h3.84a.5.5 0 0 0 .49-.4l.37-2.52c.58-.24 1.12-.55 1.62-.93l2.4.95a.5.5 0 0 0 .61-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.5A3.5 3.5 0 1 1 12 8a3.5 3.5 0 0 1 0 7.5z"></path>
+        </svg>
+      </button>
     </div>
   </div>
 
@@ -84,7 +263,7 @@ input[type=range]{accent-color:#3b82f6}
     <div class="section-title">Detected chord</div>
     <div class="detected">
       <div id="chordDisplay" class="chord">—</div>
-      <div id="stateDisplay" class="state">Tap Start Listening</div>
+      <div id="stateDisplay" class="state">Tap play to listen</div>
     </div>
     <div class="confidence-row">
       <span>Match confidence</span>
@@ -92,17 +271,10 @@ input[type=range]{accent-color:#3b82f6}
     </div>
     <div class="bar"><div id="confidenceBar"></div></div>
     <div id="statusLine" class="statusline">Volume: 0.0000 | Gap: 0.0%</div>
-  </div>
 
-  <div class="card">
-    <div class="grid">
-      <button id="startBtn" class="primary">🎙 Start Listening</button>
-      <select id="micSelect">
-        <option value="">Default microphone</option>
-      </select>
-    </div>
-    <div class="small" style="margin-top:9px;">
-      Your browser will ask for microphone permission the first time.
+    <div class="inline-history">
+      <div class="section-title" style="margin-bottom:4px;">Recent chords</div>
+      <div id="historyDisplay" class="history">No chords detected yet</div>
     </div>
   </div>
 
@@ -122,29 +294,6 @@ input[type=range]{accent-color:#3b82f6}
   </div>
 
   <div class="card">
-    <div class="section-title">Recent chords</div>
-    <div id="historyDisplay" class="history">No chords detected yet</div>
-  </div>
-
-  <div class="card">
-    <div class="section-title">Detection settings</div>
-    <div class="settings-row">
-      <div class="settings-label">
-        <span>Precision threshold</span>
-        <strong id="precisionValue">80%</strong>
-      </div>
-      <input id="precisionSlider" type="range" min="0" max="100" value="80">
-    </div>
-    <div class="settings-row">
-      <div class="settings-label">
-        <span>Mic sensitivity</span>
-        <strong id="sensitivityValue">70%</strong>
-      </div>
-      <input id="sensitivitySlider" type="range" min="0" max="100" value="70">
-    </div>
-  </div>
-
-  <div class="card">
     <button id="guideToggle" class="secondary">Hide Chord Guide</button>
     <div id="guideSection" class="guide" style="margin-top:12px">
       <div class="section-title">Chord reference guide</div>
@@ -155,6 +304,43 @@ input[type=range]{accent-color:#3b82f6}
     </div>
   </div>
 
+</div>
+
+<div id="settingsOverlay" class="settings-overlay" aria-hidden="true">
+  <div class="settings-sheet">
+    <div class="settings-sheet-head">
+      <div class="settings-sheet-title">⚙ Detection Settings</div>
+      <button id="closeSettingsBtn" class="close-settings" aria-label="Close settings">×</button>
+    </div>
+
+    <div class="settings-block">
+      <div class="section-title">Microphone</div>
+      <select id="micSelect">
+        <option value="">Default microphone</option>
+      </select>
+      <div class="small" style="margin-top:8px;">
+        Your browser will ask for microphone permission the first time.
+      </div>
+    </div>
+
+    <div class="settings-block">
+      <div class="settings-row">
+        <div class="settings-label">
+          <span>Precision threshold</span>
+          <strong id="precisionValue">80%</strong>
+        </div>
+        <input id="precisionSlider" type="range" min="0" max="100" value="80">
+      </div>
+
+      <div class="settings-row">
+        <div class="settings-label">
+          <span>Mic sensitivity</span>
+          <strong id="sensitivityValue">70%</strong>
+        </div>
+        <input id="sensitivitySlider" type="range" min="0" max="100" value="70">
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -212,6 +398,10 @@ const statusLine=document.getElementById("statusLine");
 const liveDot=document.getElementById("liveDot");
 const liveText=document.getElementById("liveText");
 const startBtn=document.getElementById("startBtn");
+const playPauseIcon=document.getElementById("playPauseIcon");
+const gearBtn=document.getElementById("gearBtn");
+const settingsOverlay=document.getElementById("settingsOverlay");
+const closeSettingsBtn=document.getElementById("closeSettingsBtn");
 const micSelect=document.getElementById("micSelect");
 const practiceToggle=document.getElementById("practiceToggle");
 const targetChord=document.getElementById("targetChord");
@@ -268,6 +458,23 @@ guideToggle.addEventListener("click",()=>{
 guideImage.addEventListener("error",()=>{
   guideImage.style.display="none";
   guideNote.innerHTML="⚠️ <b>chords_guide.png</b> was not found. Put it in the same folder as this HTML file.";
+});
+
+function openSettings(){
+  settingsOverlay.classList.add("open");
+  settingsOverlay.setAttribute("aria-hidden","false");
+}
+
+function closeSettings(){
+  settingsOverlay.classList.remove("open");
+  settingsOverlay.setAttribute("aria-hidden","true");
+}
+
+gearBtn.addEventListener("click",openSettings);
+closeSettingsBtn.addEventListener("click",closeSettings);
+
+settingsOverlay.addEventListener("click",(event)=>{
+  if(event.target===settingsOverlay) closeSettings();
 });
 
 practiceToggle.addEventListener("change",()=>{
@@ -331,6 +538,18 @@ micSelect.addEventListener("change",async()=>{
   }
 });
 
+function setPlayPauseVisual(listening){
+  if(listening){
+    startBtn.setAttribute("aria-label","Pause");
+    playPauseIcon.innerHTML='<path d="M7 5h4v14H7zm6 0h4v14h-4z"></path>';
+    startBtn.classList.add("active");
+  }else{
+    startBtn.setAttribute("aria-label","Play");
+    playPauseIcon.innerHTML='<path d="M8 5v14l11-7z"></path>';
+    startBtn.classList.remove("active");
+  }
+}
+
 startBtn.addEventListener("click",async()=>{
   if(isListening) await stopListening();
   else await startListening();
@@ -370,9 +589,7 @@ async function startListening(){
 
     liveDot.classList.add("on");
     liveText.textContent="MIC LIVE";
-    startBtn.textContent="■ Stop Listening";
-    startBtn.classList.remove("primary");
-    startBtn.classList.add("secondary");
+    setPlayPauseVisual(true);
     stateDisplay.textContent="Listening...";
 
     await refreshMicrophones();
@@ -393,11 +610,9 @@ async function stopListening(){
 
   liveDot.classList.remove("on");
   liveText.textContent="MIC OFF";
-  startBtn.textContent="🎙 Start Listening";
-  startBtn.classList.add("primary");
-  startBtn.classList.remove("secondary");
+  setPlayPauseVisual(false);
   chordDisplay.textContent="—";
-  stateDisplay.textContent="Tap Start Listening";
+  stateDisplay.textContent="Tap play to listen";
   updateConfidence(0);
   statusLine.textContent="Volume: 0.0000 | Gap: 0.0%";
 }
