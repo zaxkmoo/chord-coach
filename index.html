@@ -31,6 +31,46 @@ body{
   padding:16px; margin-bottom:12px;
 }
 .section-title{color:var(--muted);font-size:.75rem;font-weight:800;letter-spacing:.09em;text-transform:uppercase;margin-bottom:10px}
+
+.detect-card-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:4px;
+}
+.detect-card-head .section-title{margin-bottom:0}
+.mode-toggle{
+  display:flex;
+  align-items:center;
+  gap:4px;
+  padding:3px;
+  background:#0b1220;
+  border:1px solid rgba(148,163,184,.14);
+  border-radius:999px;
+}
+.mode-btn{
+  width:auto;
+  min-height:30px;
+  height:30px;
+  padding:0 10px;
+  border:0;
+  border-radius:999px;
+  background:transparent;
+  color:var(--muted);
+  font-size:.72rem;
+  font-weight:800;
+}
+.mode-btn.active{
+  background:#2563eb;
+  color:#fff;
+}
+.fret-meta{
+  margin-top:2px;
+  color:var(--muted);
+  font-size:.9rem;
+  min-height:22px;
+}
 .detected{text-align:center;padding:8px 0 2px}
 .chord{font-size:4.7rem;font-weight:900;line-height:1;letter-spacing:-.06em;margin:8px 0 7px}
 .state{color:var(--muted);font-size:.92rem;min-height:22px}
@@ -260,10 +300,18 @@ input[type=range]{accent-color:#3b82f6}
   </div>
 
   <div class="card">
-    <div class="section-title">Detected chord</div>
+    <div class="detect-card-head">
+      <div id="detectTitle" class="section-title">Detected chord</div>
+      <div class="mode-toggle" aria-label="Detection mode">
+        <button id="chordModeBtn" class="mode-btn active" type="button">Chord</button>
+        <button id="fretModeBtn" class="mode-btn" type="button">Fret</button>
+      </div>
+    </div>
+
     <div class="detected">
       <div id="chordDisplay" class="chord">—</div>
       <div id="stateDisplay" class="state">Tap play to listen</div>
+      <div id="fretMeta" class="fret-meta"></div>
     </div>
     <div class="confidence-row">
       <span>Match confidence</span>
@@ -392,6 +440,10 @@ for(const [name,notes] of Object.entries(CHORD_NOTES)){
 
 const chordDisplay=document.getElementById("chordDisplay");
 const stateDisplay=document.getElementById("stateDisplay");
+const detectTitle=document.getElementById("detectTitle");
+const chordModeBtn=document.getElementById("chordModeBtn");
+const fretModeBtn=document.getElementById("fretModeBtn");
+const fretMeta=document.getElementById("fretMeta");
 const confidenceText=document.getElementById("confidenceText");
 const confidenceBar=document.getElementById("confidenceBar");
 const statusLine=document.getElementById("statusLine");
@@ -430,6 +482,7 @@ let chromaHistory=[];
 let chordDetectionHistory=[];
 let recentChords=[];
 let lastLoggedChord=null;
+let detectionMode="chord";
 
 Object.keys(CHORD_NOTES).forEach(name=>{
   const option=document.createElement("option");
@@ -476,6 +529,30 @@ closeSettingsBtn.addEventListener("click",closeSettings);
 settingsOverlay.addEventListener("click",(event)=>{
   if(event.target===settingsOverlay) closeSettings();
 });
+
+
+function setDetectionMode(mode){
+  detectionMode=mode;
+  const isChord=mode==="chord";
+
+  chordModeBtn.classList.toggle("active",isChord);
+  fretModeBtn.classList.toggle("active",!isChord);
+  detectTitle.textContent=isChord?"Detected chord":"Detected fret";
+
+  chordDetectionHistory=[];
+  chromaHistory=[];
+  fretPitchHistory=[];
+  lastFretPosition=null;
+
+  if(!isListening){
+    chordDisplay.textContent="—";
+    stateDisplay.textContent="Tap play to listen";
+    fretMeta.textContent="";
+  }
+}
+
+chordModeBtn.addEventListener("click",()=>setDetectionMode("chord"));
+fretModeBtn.addEventListener("click",()=>setDetectionMode("fret"));
 
 practiceToggle.addEventListener("change",()=>{
   targetChord.disabled=!practiceToggle.checked;
@@ -613,6 +690,7 @@ async function stopListening(){
   setPlayPauseVisual(false);
   chordDisplay.textContent="—";
   stateDisplay.textContent="Tap play to listen";
+  fretMeta.textContent="";
   updateConfidence(0);
   statusLine.textContent="Volume: 0.0000 | Gap: 0.0%";
 }
@@ -693,6 +771,388 @@ function addToRecentHistory(chord){
   historyDisplay.textContent=recentChords.join("  →  ");
 }
 
+
+/* ==========================================================
+   FRET MODE — YIN FUNDAMENTAL PITCH DETECTION
+   Standard guitar tuning:
+   String 6 E2, 5 A2, 4 D3, 3 G3, 2 B3, 1 E4
+
+   Why YIN:
+   - Detects the fundamental rather than simply choosing the
+     loudest FFT peak.
+   - Reduces octave/harmonic errors from guitar overtones.
+   - Uses parabolic interpolation for finer frequency accuracy.
+   ========================================================== */
+
+const GUITAR_STRINGS=[
+  {string:6,midi:40,name:"E2"},
+  {string:5,midi:45,name:"A2"},
+  {string:4,midi:50,name:"D3"},
+  {string:3,midi:55,name:"G3"},
+  {string:2,midi:59,name:"B3"},
+  {string:1,midi:64,name:"E4"}
+];
+
+const NOTE_NAMES=["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+
+const YIN_THRESHOLD=0.15;
+const FRET_MIN_FREQ=70;
+const FRET_MAX_FREQ=1200;
+const PITCH_HISTORY_SIZE=5;
+
+let fretPitchHistory=[];
+let lastFretPosition=null;
+
+function frequencyToMidiFloat(freq){
+  return 69+12*Math.log2(freq/440);
+}
+
+function frequencyToMidi(freq){
+  return Math.round(frequencyToMidiFloat(freq));
+}
+
+function midiToNoteName(midi){
+  const name=NOTE_NAMES[((midi%12)+12)%12];
+  const octave=Math.floor(midi/12)-1;
+  return `${name}${octave}`;
+}
+
+function centsFromNearestNote(freq){
+  const midiFloat=frequencyToMidiFloat(freq);
+  const nearest=Math.round(midiFloat);
+  return (midiFloat-nearest)*100;
+}
+
+function median(values){
+  if(!values.length)return null;
+  const copy=[...values].sort((a,b)=>a-b);
+  const middle=Math.floor(copy.length/2);
+  return copy.length%2
+    ? copy[middle]
+    : (copy[middle-1]+copy[middle])/2;
+}
+
+/*
+  YIN pitch detector.
+  Returns:
+  {
+    frequency: Hz,
+    confidence: 0..1,
+    period: refined sample lag
+  }
+*/
+function detectPitchYIN(){
+  analyser.getFloatTimeDomainData(timeData);
+
+  const sampleRate=audioContext.sampleRate;
+
+  // A 4096-sample section is sufficient for the low E string
+  // while keeping the calculation light enough for mobile.
+  const bufferLength=Math.min(4096,timeData.length);
+  const buffer=timeData.subarray(0,bufferLength);
+
+  // Remove DC offset.
+  let mean=0;
+  for(let i=0;i<bufferLength;i++)mean+=buffer[i];
+  mean/=bufferLength;
+
+  const minTau=Math.max(
+    2,
+    Math.floor(sampleRate/FRET_MAX_FREQ)
+  );
+
+  const maxTau=Math.min(
+    Math.floor(sampleRate/FRET_MIN_FREQ),
+    Math.floor(bufferLength/2)-1
+  );
+
+  if(maxTau<=minTau)return null;
+
+  const difference=new Float32Array(maxTau+1);
+
+  // YIN difference function.
+  for(let tau=minTau;tau<=maxTau;tau++){
+    let sum=0;
+    const limit=bufferLength-maxTau;
+
+    for(let i=0;i<limit;i++){
+      const delta=(buffer[i]-mean)-(buffer[i+tau]-mean);
+      sum+=delta*delta;
+    }
+
+    difference[tau]=sum;
+  }
+
+  // Cumulative mean normalized difference function.
+  const cmnd=new Float32Array(maxTau+1);
+  cmnd[0]=1;
+
+  let runningSum=0;
+
+  for(let tau=1;tau<=maxTau;tau++){
+    runningSum+=difference[tau];
+
+    cmnd[tau]=runningSum===0
+      ? 1
+      : difference[tau]*tau/runningSum;
+  }
+
+  // Find first sufficiently deep minimum.
+  let tauEstimate=-1;
+
+  for(let tau=minTau;tau<maxTau;tau++){
+    if(cmnd[tau]<YIN_THRESHOLD){
+      while(
+        tau+1<=maxTau &&
+        cmnd[tau+1]<cmnd[tau]
+      ){
+        tau++;
+      }
+
+      tauEstimate=tau;
+      break;
+    }
+  }
+
+  // If no threshold crossing exists, use the best minimum,
+  // but reject weak/non-periodic sounds.
+  if(tauEstimate<0){
+    let bestTau=minTau;
+    let bestValue=cmnd[minTau];
+
+    for(let tau=minTau+1;tau<=maxTau;tau++){
+      if(cmnd[tau]<bestValue){
+        bestValue=cmnd[tau];
+        bestTau=tau;
+      }
+    }
+
+    if(bestValue>0.30)return null;
+    tauEstimate=bestTau;
+  }
+
+  // Parabolic interpolation around the CMND minimum.
+  let refinedTau=tauEstimate;
+
+  if(
+    tauEstimate>minTau &&
+    tauEstimate<maxTau
+  ){
+    const y1=cmnd[tauEstimate-1];
+    const y2=cmnd[tauEstimate];
+    const y3=cmnd[tauEstimate+1];
+
+    const denominator=(y1-2*y2+y3);
+
+    if(Math.abs(denominator)>1e-12){
+      const shift=0.5*(y1-y3)/denominator;
+
+      if(Math.abs(shift)<=1){
+        refinedTau=tauEstimate+shift;
+      }
+    }
+  }
+
+  const frequency=sampleRate/refinedTau;
+
+  if(
+    !Number.isFinite(frequency) ||
+    frequency<FRET_MIN_FREQ ||
+    frequency>FRET_MAX_FREQ
+  ){
+    return null;
+  }
+
+  const confidence=Math.max(
+    0,
+    Math.min(1,1-cmnd[tauEstimate])
+  );
+
+  return {
+    frequency,
+    confidence,
+    period:refinedTau
+  };
+}
+
+function getSmoothedPitch(newFrequency){
+  if(!newFrequency)return null;
+
+  fretPitchHistory.push(newFrequency);
+
+  while(fretPitchHistory.length>PITCH_HISTORY_SIZE){
+    fretPitchHistory.shift();
+  }
+
+  /*
+    Median smoothing is useful here because a single octave
+    mistake will not drag the displayed pitch far away.
+  */
+  return median(fretPitchHistory);
+}
+
+function getAllGuitarPositions(freq){
+  if(!freq||freq<=0)return [];
+
+  const midi=frequencyToMidi(freq);
+  const positions=[];
+
+  for(const s of GUITAR_STRINGS){
+    const fret=midi-s.midi;
+
+    if(fret>=0&&fret<=20){
+      positions.push({
+        string:s.string,
+        fret,
+        note:midiToNoteName(midi),
+        midi
+      });
+    }
+  }
+
+  return positions;
+}
+
+function choosePreferredPosition(positions){
+  if(!positions.length)return null;
+
+  /*
+    If we already detected a nearby guitar position, keep the
+    movement physically smooth. This prevents the display from
+    jumping randomly between equivalent string/fret positions.
+  */
+  if(lastFretPosition){
+    let best=null;
+    let bestScore=Infinity;
+
+    for(const p of positions){
+      const fretMove=Math.abs(
+        p.fret-lastFretPosition.fret
+      );
+
+      const stringMove=Math.abs(
+        p.string-lastFretPosition.string
+      );
+
+      const score=
+        fretMove*1.0 +
+        stringMove*1.5;
+
+      if(score<bestScore){
+        best=p;
+        bestScore=score;
+      }
+    }
+
+    if(best)return best;
+  }
+
+  /*
+    For the first note, favor common lower-fret positions.
+    Open strings get a small preference.
+  */
+  return [...positions].sort((a,b)=>{
+    const scoreA=a.fret+(a.fret===0?-1.5:0);
+    const scoreB=b.fret+(b.fret===0?-1.5:0);
+
+    if(scoreA!==scoreB)return scoreA-scoreB;
+
+    // If tied, prefer the thicker string.
+    return b.string-a.string;
+  })[0];
+}
+
+function formatAlternativePositions(
+  positions,
+  preferred
+){
+  const alternatives=positions.filter(
+    p=>!(
+      p.string===preferred.string &&
+      p.fret===preferred.fret
+    )
+  );
+
+  if(!alternatives.length)return "";
+
+  return alternatives
+    .slice(0,3)
+    .map(p=>`S${p.string} F${p.fret}`)
+    .join(" / ");
+}
+
+function displayFretMode(rms){
+  const detected=detectPitchYIN();
+
+  if(
+    !detected ||
+    detected.confidence<0.65
+  ){
+    chordDisplay.textContent="—";
+    stateDisplay.textContent="Listening for a clear note...";
+    fretMeta.textContent="";
+    updateConfidence(
+      detected ? detected.confidence : 0
+    );
+    return;
+  }
+
+  const smoothedFrequency=
+    getSmoothedPitch(detected.frequency);
+
+  if(!smoothedFrequency)return;
+
+  const positions=
+    getAllGuitarPositions(smoothedFrequency);
+
+  if(!positions.length){
+    chordDisplay.textContent="—";
+    stateDisplay.textContent="Outside guitar fret range";
+    fretMeta.textContent=
+      `${smoothedFrequency.toFixed(1)} Hz`;
+    updateConfidence(detected.confidence);
+    return;
+  }
+
+  const preferred=
+    choosePreferredPosition(positions);
+
+  lastFretPosition=preferred;
+
+  const cents=
+    centsFromNearestNote(smoothedFrequency);
+
+  const alternatives=
+    formatAlternativePositions(
+      positions,
+      preferred
+    );
+
+  chordDisplay.textContent=
+    `${preferred.fret}`;
+
+  stateDisplay.textContent=
+    `String ${preferred.string} • Fret ${preferred.fret}`;
+
+  let meta=
+    `${preferred.note} • ${smoothedFrequency.toFixed(1)} Hz`;
+
+  if(Math.abs(cents)>=2){
+    const sign=cents>0?"+":"";
+    meta+=` • ${sign}${cents.toFixed(0)} cents`;
+  }
+
+  if(alternatives){
+    meta+=` • Also: ${alternatives}`;
+  }
+
+  fretMeta.textContent=meta;
+
+  updateConfidence(
+    detected.confidence
+  );
+}
+
 function analyseAudio(){
   if(!analyser||!audioContext)return;
 
@@ -702,8 +1162,15 @@ function analyseAudio(){
   if(rms<rmsThreshold){
     chordDetectionHistory=[];
     lastLoggedChord=null;
+
+    if(detectionMode==="fret"){
+      fretPitchHistory=[];
+      lastFretPosition=null;
+    }
+
     chordDisplay.textContent="—";
     stateDisplay.textContent="Listening...";
+    fretMeta.textContent="";
     updateConfidence(0);
     statusLine.textContent=`Volume: ${rms.toFixed(4)} | Gap: 0.0%`;
 
@@ -714,6 +1181,13 @@ function analyseAudio(){
     return;
   }
 
+  if(detectionMode==="fret"){
+    displayFretMode(rms);
+    statusLine.textContent=`Volume: ${rms.toFixed(4)} | YIN pitch detection`;
+    return;
+  }
+
+  fretMeta.textContent="";
   const chroma=getSmoothedChroma(calculateChroma());
   const scores={};
 
@@ -731,10 +1205,12 @@ function analyseAudio(){
     chordDetectionHistory=[];
     chordDisplay.textContent="—";
     stateDisplay.textContent="Listening...";
+    fretMeta.textContent="";
   } else if(gap<CONFIDENCE_GAP){
     chordDetectionHistory=[];
     chordDisplay.textContent="?";
     stateDisplay.textContent="Uncertain...";
+    fretMeta.textContent="";
   } else {
     chordDetectionHistory.push(bestChord);
     while(chordDetectionHistory.length>SMOOTHING_FRAMES)chordDetectionHistory.shift();
