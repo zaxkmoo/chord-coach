@@ -65,6 +65,60 @@ body{
   background:#2563eb;
   color:#fff;
 }
+
+.detection-level-wrap{
+  margin:12px 0 6px;
+}
+.detection-level-label{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom:7px;
+  color:var(--muted);
+  font-size:.75rem;
+  font-weight:800;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+}
+.detection-level-label strong{
+  color:var(--text);
+  font-size:.75rem;
+  letter-spacing:0;
+  text-transform:none;
+}
+.detection-level-toggle{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:5px;
+  padding:4px;
+  background:#0b1220;
+  border:1px solid rgba(148,163,184,.14);
+  border-radius:14px;
+}
+.level-btn{
+  min-height:42px;
+  height:auto;
+  padding:6px 8px;
+  border:0;
+  border-radius:10px;
+  background:transparent;
+  color:var(--muted);
+  font-size:.72rem;
+  font-weight:900;
+  line-height:1.2;
+}
+.level-btn span{
+  display:block;
+  margin-top:2px;
+  font-size:.67rem;
+  font-weight:700;
+  opacity:.8;
+}
+.level-btn.active{
+  background:#2563eb;
+  color:#fff;
+}
 .fret-meta{
   margin-top:2px;
   color:var(--muted);
@@ -362,6 +416,27 @@ input[type=range]{accent-color:#3b82f6}
       </div>
     </div>
 
+    <div id="detectionLevelWrap" class="detection-level-wrap">
+      <div class="detection-level-label">
+        <span>Detection level</span>
+        <strong id="detectionLevelText">Level 3 • 80%+</strong>
+      </div>
+      <div class="detection-level-toggle" aria-label="Chord detection precision">
+        <button id="level1Btn" class="level-btn" type="button">
+          Level 1
+          <span>60%+</span>
+        </button>
+        <button id="level2Btn" class="level-btn" type="button">
+          Level 2
+          <span>70%+</span>
+        </button>
+        <button id="level3Btn" class="level-btn active" type="button">
+          Level 3
+          <span>80%+</span>
+        </button>
+      </div>
+    </div>
+
     <div class="detected">
       <div id="chordDisplay" class="chord">—</div>
       <div id="stateDisplay" class="state">Tap play to listen</div>
@@ -469,10 +544,10 @@ input[type=range]{accent-color:#3b82f6}
     <div class="settings-block">
       <div class="settings-row">
         <div class="settings-label">
-          <span>Precision threshold</span>
+          <span>Chord detection threshold</span>
           <strong id="precisionValue">80%</strong>
         </div>
-        <input id="precisionSlider" type="range" min="0" max="100" value="80">
+        <input id="precisionSlider" type="range" min="60" max="80" step="10" value="80">
       </div>
 
       <div class="settings-row">
@@ -538,6 +613,11 @@ const stateDisplay=document.getElementById("stateDisplay");
 const detectTitle=document.getElementById("detectTitle");
 const chordModeBtn=document.getElementById("chordModeBtn");
 const fretModeBtn=document.getElementById("fretModeBtn");
+const detectionLevelWrap=document.getElementById("detectionLevelWrap");
+const detectionLevelText=document.getElementById("detectionLevelText");
+const level1Btn=document.getElementById("level1Btn");
+const level2Btn=document.getElementById("level2Btn");
+const level3Btn=document.getElementById("level3Btn");
 const fretMeta=document.getElementById("fretMeta");
 const confidenceText=document.getElementById("confidenceText");
 const confidenceBar=document.getElementById("confidenceBar");
@@ -590,10 +670,45 @@ Object.keys(CHORD_NOTES).forEach(name=>{
 });
 targetChord.value="C Major";
 
+const DETECTION_LEVELS = {
+  1: { threshold:0.60, label:"Level 1 • 60%+" },
+  2: { threshold:0.70, label:"Level 2 • 70%+" },
+  3: { threshold:0.80, label:"Level 3 • 80%+" }
+};
+
+let detectionLevel=3;
+
+function setDetectionLevel(level){
+  detectionLevel=Number(level);
+  const config=DETECTION_LEVELS[detectionLevel];
+
+  threshold=config.threshold;
+  const percent=Math.round(threshold*100);
+
+  detectionLevelText.textContent=config.label;
+  precisionSlider.value=String(percent);
+  precisionValue.textContent=`${percent}%`;
+
+  level1Btn.classList.toggle("active",detectionLevel===1);
+  level2Btn.classList.toggle("active",detectionLevel===2);
+  level3Btn.classList.toggle("active",detectionLevel===3);
+
+  // Clear previous chord smoothing so the new threshold applies immediately.
+  chordDetectionHistory=[];
+}
+
+level1Btn.addEventListener("click",()=>setDetectionLevel(1));
+level2Btn.addEventListener("click",()=>setDetectionLevel(2));
+level3Btn.addEventListener("click",()=>setDetectionLevel(3));
+
 precisionSlider.addEventListener("input",()=>{
-  threshold=Number(precisionSlider.value)/100;
-  precisionValue.textContent=`${precisionSlider.value}%`;
+  const value=Number(precisionSlider.value);
+  if(value<=60) setDetectionLevel(1);
+  else if(value<=70) setDetectionLevel(2);
+  else setDetectionLevel(3);
 });
+
+setDetectionLevel(3);
 
 sensitivitySlider.addEventListener("input",()=>{
   sensitivity=Number(sensitivitySlider.value);
@@ -658,6 +773,7 @@ function setDetectionMode(mode){
 
   chordModeBtn.classList.toggle("active",isChord);
   fretModeBtn.classList.toggle("active",!isChord);
+  detectionLevelWrap.style.display=isChord?"block":"none";
   detectTitle.textContent=isChord?"Detected chord":"Detected fret";
 
   chordDetectionHistory=[];
@@ -1293,7 +1409,9 @@ function analyseAudio(){
     stateDisplay.textContent="Listening...";
     fretMeta.textContent="";
     updateConfidence(0);
-    statusLine.textContent=`Volume: ${rms.toFixed(4)} | Gap: 0.0%`;
+    statusLine.textContent=detectionMode==="chord"
+      ? `Level ${detectionLevel} • ${Math.round(threshold*100)}%+ | Volume: ${rms.toFixed(4)} | Gap: 0.0%`
+      : `Volume: ${rms.toFixed(4)} | Gap: 0.0%`;
 
     if(practiceToggle.checked){
       practiceResult.textContent=`Play ${CHORD_SHORT_NAMES[targetChord.value]}`;
@@ -1350,7 +1468,7 @@ function analyseAudio(){
   }
 
   updateConfidence(bestScore);
-  statusLine.textContent=`Volume: ${rms.toFixed(4)} | Gap: ${(gap*100).toFixed(1)}%`;
+  statusLine.textContent=`Level ${detectionLevel} • ${Math.round(threshold*100)}%+ | Volume: ${rms.toFixed(4)} | Gap: ${(gap*100).toFixed(1)}%`;
 }
 
 function updateConfidence(value){
