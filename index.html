@@ -102,6 +102,60 @@ input[type=range]{accent-color:#3b82f6}
 .small{color:var(--muted);font-size:.75rem;line-height:1.5}
 .guide img{display:block;width:100%;border-radius:12px;background:white}
 .guide-note{color:var(--muted);text-align:center;font-size:.78rem;margin-top:8px}
+
+.guide-header{
+  text-align:center;
+  margin-bottom:12px;
+}
+.guide-title{
+  font-size:1.15rem;
+  font-weight:900;
+  color:var(--text);
+  margin-bottom:5px;
+}
+.guide-description{
+  color:var(--muted);
+  font-size:.82rem;
+  line-height:1.5;
+}
+.guide-description strong{
+  color:var(--text);
+}
+.guide-selector{
+  margin:14px 0 12px;
+}
+.guide-selector label{
+  display:block;
+  color:var(--muted);
+  font-size:.78rem;
+  font-weight:800;
+  margin-bottom:6px;
+}
+.guide-image-wrap{
+  background:#fff;
+  border-radius:14px;
+  overflow:hidden;
+  min-height:220px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.guide-image-wrap img{
+  display:block;
+  width:100%;
+  height:auto;
+  object-fit:contain;
+  background:#fff;
+}
+.guide-missing{
+  display:none;
+  padding:30px 18px;
+  color:#b91c1c;
+  text-align:center;
+  font-size:.82rem;
+  background:#fff;
+  width:100%;
+}
 .statusline{margin-top:10px;text-align:center;color:var(--muted);font-size:.78rem}
 .error{color:var(--red)!important}
 
@@ -343,11 +397,52 @@ input[type=range]{accent-color:#3b82f6}
 
   <div class="card">
     <button id="guideToggle" class="secondary">Hide Chord Guide</button>
+
     <div id="guideSection" class="guide" style="margin-top:12px">
-      <div class="section-title">Chord reference guide</div>
-      <img id="guideImage" src="chords_guide.png" alt="Guitar chord reference guide">
+      <div class="guide-header">
+        <div class="guide-title">Chord Guide</div>
+        <div class="guide-description">
+          <strong>O</strong> = Play open &nbsp; • &nbsp;
+          <strong>X</strong> = Do not play / mute
+        </div>
+      </div>
+
+      <div class="guide-selector">
+        <label for="guideChordSelect">Select chord</label>
+        <select id="guideChordSelect">
+          <option value="A">A</option>
+          <option value="Am">Am</option>
+          <option value="A7">A7</option>
+          <option value="B">B</option>
+          <option value="Bm">Bm</option>
+          <option value="B7">B7</option>
+          <option value="C">C</option>
+          <option value="Cm">Cm</option>
+          <option value="C7">C7</option>
+          <option value="D">D</option>
+          <option value="Dm">Dm</option>
+          <option value="D7">D7</option>
+          <option value="E">E</option>
+          <option value="Em">Em</option>
+          <option value="E7">E7</option>
+          <option value="F">F</option>
+          <option value="Fm">Fm</option>
+          <option value="F7">F7</option>
+          <option value="G">G</option>
+          <option value="Gm">Gm</option>
+          <option value="G7">G7</option>
+        </select>
+      </div>
+
+      <div class="guide-image-wrap">
+        <img id="guideImage" src="assets/A.png" alt="A guitar chord diagram">
+        <div id="guideMissing" class="guide-missing">
+          Chord image not found.
+        </div>
+      </div>
+
       <div id="guideNote" class="guide-note">
-        Keep <b>chords_guide.png</b> in the same folder as this HTML file.
+        Showing <b id="guideCurrentChord">A</b>
       </div>
     </div>
   </div>
@@ -465,7 +560,10 @@ const sensitivitySlider=document.getElementById("sensitivitySlider");
 const sensitivityValue=document.getElementById("sensitivityValue");
 const guideToggle=document.getElementById("guideToggle");
 const guideSection=document.getElementById("guideSection");
+const guideChordSelect=document.getElementById("guideChordSelect");
 const guideImage=document.getElementById("guideImage");
+const guideMissing=document.getElementById("guideMissing");
+const guideCurrentChord=document.getElementById("guideCurrentChord");
 const guideNote=document.getElementById("guideNote");
 
 let threshold=0.80;
@@ -508,10 +606,33 @@ guideToggle.addEventListener("click",()=>{
   guideToggle.textContent=hidden?"Hide Chord Guide":"Show Chord Guide";
 });
 
+function showGuideChord(chord){
+  guideCurrentChord.textContent=chord;
+  guideImage.alt=`${chord} guitar chord diagram`;
+
+  guideMissing.style.display="none";
+  guideImage.style.display="block";
+
+  // PNG file names must match exactly inside assets/, e.g. assets/Am.png
+  guideImage.src=`assets/${chord}.png`;
+}
+
+guideChordSelect.addEventListener("change",()=>{
+  showGuideChord(guideChordSelect.value);
+});
+
+guideImage.addEventListener("load",()=>{
+  guideMissing.style.display="none";
+  guideImage.style.display="block";
+});
+
 guideImage.addEventListener("error",()=>{
   guideImage.style.display="none";
-  guideNote.innerHTML="⚠️ <b>chords_guide.png</b> was not found. Put it in the same folder as this HTML file.";
+  guideMissing.style.display="block";
+  guideMissing.textContent=`assets/${guideChordSelect.value}.png was not found.`;
 });
+
+showGuideChord("A");
 
 function openSettings(){
   settingsOverlay.classList.add("open");
